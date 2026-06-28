@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>모바일 알파인 리눅스</title>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+    
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            background-color: #1a1a1a; 
+            color: #fff; 
+            font-family: sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh;
+            overflow: hidden;
+        }
+        header {
+            background-color: #2d2d2d;
+            padding: 10px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            border-bottom: 1px solid #444;
+        }
+        /* 터미널이 그려질 영역 */
+        #terminal-container {
+            flex: 1;
+            background-color: #000;
+            padding: 5px;
+            overflow: hidden;
+        }
+        /* 모바일용 입력 보조 버튼 바 */
+        .controls {
+            background-color: #2d2d2d;
+            padding: 10px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            border-top: 1px solid #444;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 14px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:active { background-color: #3e8e41; }
+        /* 모바일 키보드를 강제로 깨우기 위한 숨겨진 입력창 */
+        #hidden-input {
+            position: absolute;
+            opacity: 0;
+            left: -9999px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>Alpine Linux Mobile Emulator (v86 + Xterm.js)</header>
+    
+    <div id="terminal-container"></div>
+
+    <div class="controls">
+        <button id="btn-keyboard">⌨️ 키보드 열기/닫기</button>
+        <button id="btn-enter">↩️ Enter</button>
+    </div>
+
+    <input type="text" id="hidden-input" autocomplete="off" autocapitalize="none">
+
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://copy.sh/v86/build/libv86.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const container = document.getElementById('terminal-container');
+            const hiddenInput = document.getElementById('hidden-input');
+            
+            // 1. Xterm.js 터미널 초기화 (모바일 폰트 및 패딩 최적화)
+            const term = new Terminal({
+                cursorBlink: true,
+                fontSize: 13,
+                fontFamily: 'Courier New, monospace',
+                theme: { background: '#000000' }
+            });
+            term.open(container);
+            term.write("에뮬레이터 부팅 준비 중...\r\n");
+
+            // 2. v86 에뮬레이터 초기화 (네트워크 없이 구동하는 가벼운 알파인 이미지 연결)
+            const emulator = new V86Starter({
+                wasm_path: "https://copy.sh/v86/build/v86.wasm",
+                memory_size: 64 * 1024 * 1024, // 64MB RAM
+                vga_as_text_mode: true,
+                bios: { url: "https://copy.sh/v86/bios/seabios.bin" },
+                // 오픈소스 테스트용 가벼운 리눅스 이미지 사용
+                iso: { url: "https://copy.sh/v86/images/linux3.iso" }, 
+                autostart: true,
+            });
+
+            // 3. 에뮬레이터 출력 내용을 Xterm.js 터미널에 연동
+            emulator.add_listener("serial0-output-char", function(char) {
+                term.write(char);
+            });
+
+            // 4. 터미널 입력 내용을 에뮬레이터(리눅스)로 전달
+            term.onData(data => {
+                emulator.serial0_send(data);
+            });
+
+            // 5. 모바일 전용: 키보드 열기 버튼 이벤트
+            document.getElementById('btn-keyboard').addEventListener('click', function() {
+                hiddenInput.focus();
+            });
+
+            // 숨겨진 입력창에 글자가 타이핑되면 터미널로 전달하고 비우기
+            hiddenInput.addEventListener('input', function(e) {
+                const data = e.target.value;
+                if(data) {
+                    emulator.serial0_send(data);
+                    hiddenInput.value = ''; // 즉시 초기화
+                }
+            });
+
+            // 엔터 버튼 처리
+            document.getElementById('btn-enter').addEventListener('click', function() {
+                emulator.serial0_send("\n");
+                hiddenInput.focus();
+            });
+        });
+    </script>
+</body>
+</html>
